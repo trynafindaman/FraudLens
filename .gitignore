@@ -1,0 +1,35 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+
+# Data files (keep raw CSVs out of version control)
+data/*.csv
+!data/sample_creditcard.csv
+
+# Model artifacts
+models/*.joblib
+models/*.pkl
+*.pt
+*.pth
+
+# Environment & credentials
+.env
+.env.local
+
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+tech-stack.md
+design-doc.html
