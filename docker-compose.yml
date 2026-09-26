@@ -9,6 +9,8 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    networks:
+      - fraud-net
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -24,3 +26,50 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - fraud-net
+
+  api:
+    build: .
+    container_name: fraud-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - FRAUD_THRESHOLD=0.80
+    volumes:
+      - ./models:/app/models
+    networks:
+      - fraud-net
+
+  consumer:
+    build: .
+    container_name: fraud-consumer
+    depends_on:
+      - kafka
+      - api
+    command: python consumer.py --bootstrap-servers kafka:29092 --api-url http://api:8000/score
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - SCORING_API_URL=http://api:8000/score
+    volumes:
+      - ./data:/app/data
+    networks:
+      - fraud-net
+
+  producer:
+    build: .
+    container_name: fraud-producer
+    depends_on:
+      - kafka
+    command: python producer.py --bootstrap-servers kafka:29092 --delay 0.5 --use-sample --inject-fraud-every 5
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    volumes:
+      - ./data:/app/data
+    networks:
+      - fraud-net
+
+networks:
+  fraud-net:
+    driver: bridge

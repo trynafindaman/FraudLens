@@ -84,30 +84,35 @@ def format_transaction(
     }
 
 
-def create_producer(bootstrap_servers: str):
-    """Instantiate a KafkaProducer client.
+def create_producer(bootstrap_servers: str, max_retries: int = 12, retry_delay: float = 3.0):
+    """Instantiate a KafkaProducer client with automatic retry backoff."""
+    from kafka import KafkaProducer
 
-    Args:
-        bootstrap_servers: Comma-separated list of host:port Kafka brokers.
-
-    Returns:
-        Configured KafkaProducer instance.
-    """
-    try:
-        from kafka import KafkaProducer
-
-        producer = KafkaProducer(
-            bootstrap_servers=bootstrap_servers.split(","),
-            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-            key_serializer=lambda k: k.encode("utf-8") if k else None,
-            acks="all",
-            retries=3,
-        )
-        logger.info("Connected to Kafka brokers at %s", bootstrap_servers)
-        return producer
-    except Exception as exc:
-        logger.error("Failed to connect to Kafka at %s: %s", bootstrap_servers, exc)
-        raise
+    logger.info("Connecting to Kafka producer at %s...", bootstrap_servers)
+    for attempt in range(1, max_retries + 1):
+        try:
+            producer = KafkaProducer(
+                bootstrap_servers=bootstrap_servers.split(","),
+                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+                key_serializer=lambda k: k.encode("utf-8") if k else None,
+                acks="all",
+                retries=3,
+            )
+            logger.info("Connected to Kafka brokers at %s", bootstrap_servers)
+            return producer
+        except Exception as exc:
+            if attempt < max_retries:
+                logger.warning(
+                    "Kafka broker not ready yet (%s). Retrying in %.0fs (attempt %d/%d)...",
+                    exc,
+                    retry_delay,
+                    attempt,
+                    max_retries,
+                )
+                time.sleep(retry_delay)
+            else:
+                logger.error("Failed to connect producer after %d attempts: %s", max_retries, exc)
+                raise
 
 
 def stream_transactions(

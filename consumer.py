@@ -155,25 +155,40 @@ def create_kafka_consumer(
     bootstrap_servers: str,
     topic_in: str,
     group_id: str = "fraud-detection-consumers",
+    max_retries: int = 12,
+    retry_delay: float = 3.0,
 ):
-    """Instantiate a KafkaConsumer client."""
-    try:
-        from kafka import KafkaConsumer
+    """Instantiate a KafkaConsumer client with automatic retry backoff."""
+    from kafka import KafkaConsumer
 
-        consumer = KafkaConsumer(
-            topic_in,
-            bootstrap_servers=bootstrap_servers.split(","),
-            group_id=group_id,
-            auto_offset_reset="earliest",
-            enable_auto_commit=True,
-            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-            key_deserializer=lambda k: k.decode("utf-8") if k else None,
-        )
-        logger.info("Connected to Kafka brokers at %s, subscribed to '%s'", bootstrap_servers, topic_in)
-        return consumer
-    except Exception as exc:
-        logger.error("Failed to connect Kafka consumer at %s: %s", bootstrap_servers, exc)
-        raise
+    logger.info("Connecting to Kafka at %s (waiting for broker to be ready)...", bootstrap_servers)
+    for attempt in range(1, max_retries + 1):
+        try:
+            consumer = KafkaConsumer(
+                topic_in,
+                bootstrap_servers=bootstrap_servers.split(","),
+                group_id=group_id,
+                auto_offset_reset="earliest",
+                enable_auto_commit=True,
+                value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+                key_deserializer=lambda k: k.decode("utf-8") if k else None,
+            )
+            logger.info("Connected to Kafka brokers at %s, subscribed to '%s'", bootstrap_servers, topic_in)
+            return consumer
+        except Exception as exc:
+            if attempt < max_retries:
+                logger.warning(
+                    "Kafka not ready yet at %s (%s). Retrying in %.0fs (attempt %d/%d)...",
+                    bootstrap_servers,
+                    exc,
+                    retry_delay,
+                    attempt,
+                    max_retries,
+                )
+                time.sleep(retry_delay)
+            else:
+                logger.error("Failed to connect Kafka consumer after %d attempts: %s", max_retries, exc)
+                raise
 
 
 def run_consumer_loop(

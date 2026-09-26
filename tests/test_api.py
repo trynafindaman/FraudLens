@@ -109,3 +109,18 @@ def test_metrics_endpoint(client: TestClient):
     assert data["suspicious_count"] >= 1
     assert 0.0 <= data["flag_rate_pct"] <= 100.0
     assert data["avg_latency_ms"] < 100.0
+
+
+def test_dashboard_endpoints(client: TestClient):
+    """Verify /dashboard returns HTML and /dashboard/data returns live JSON."""
+    html_res = client.get("/dashboard")
+    assert html_res.status_code == 200
+    assert "FraudLens" in html_res.text
+    assert "<!DOCTYPE html>" in html_res.text
+
+    data_res = client.get("/dashboard/data")
+    assert data_res.status_code == 200
+    d = data_res.json()
+    assert "total_requests" in d
+    assert "recent_transactions" in d
+
