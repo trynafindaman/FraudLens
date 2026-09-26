@@ -8,7 +8,7 @@
 [![Docker Compose](https://img.shields.io/badge/Docker-Orchestrated-2496ED.svg)](https://www.docker.com/)
 [![Tests](https://img.shields.io/badge/Tests-37%20Passed-brightgreen.svg)](https://pytest.org/)
 
-A production-grade, real-time fraud risk-scoring service in the spirit of **Stripe Radar**. 
+A production-grade, real-time fraud risk-scoring service in the spirit of **Stripe Radar**.
 
 Trained on the [Kaggle Credit Card Fraud Detection](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud) dataset, the service deploys an unsupervised anomaly detection engine (scikit-learn **Isolation Forest** and a deep **PyTorch Autoencoder**), served via an async **FastAPI** microservice, and fed by an **Apache Kafka** streaming pipeline replaying live customer payment traffic.
 

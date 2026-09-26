@@ -1,0 +1,18 @@
+---
+engines:
+  bandit:
+    enabled: true
+    exclude_paths:
+      - "tests/**"
+      - ".pytest_cache/**"
+      - "data/**"
+  flake8:
+    enabled: true
+  pylint:
+    enabled: true
+  markdownlint:
+    enabled: true
+
+exclude_paths:
+  - "data/**"
+  - ".pytest_cache/**"

@@ -33,6 +33,7 @@ logger = logging.getLogger("compare")
 
 
 def main() -> None:
+    """Execute model benchmark comparing Isolation Forest and PyTorch Autoencoder."""
     parser = argparse.ArgumentParser(description="Benchmark Isolation Forest vs Autoencoder.")
     parser.add_argument("--data-path", type=str, default=str(DEFAULT_DATA_PATH))
     parser.add_argument("--use-sample", action="store_true")
@@ -68,9 +69,16 @@ def main() -> None:
     print("\n" + "=" * 80)
     print("           MODEL BENCHMARK: ISOLATION FOREST vs. PYTORCH AUTOENCODER           ")
     print("=" * 80)
-    header = f"{'Metric':<22} | {'Isolation Forest (Baseline)':<26} | {'PyTorch Autoencoder (Stretch)':<26}"
+    header = (
+        f"{'Metric':<22} | "
+        f"{'Isolation Forest (Baseline)':<26} | "
+        f"{'PyTorch Autoencoder (Stretch)':<26}"
+    )
     print(header)
     print("-" * 80)
+
+    cm_if = if_metrics["confusion_matrix"]
+    cm_ae = ae_metrics["confusion_matrix"]
 
     metrics_to_show = [
         ("Precision", if_metrics["precision"], ae_metrics["precision"]),
@@ -78,9 +86,9 @@ def main() -> None:
         ("F1-Score", if_metrics["f1_score"], ae_metrics["f1_score"]),
         ("ROC-AUC", if_metrics["roc_auc"], ae_metrics["roc_auc"]),
         ("PR-AUC (Avg Prec)", if_metrics["pr_auc"], ae_metrics["pr_auc"]),
-        ("False Positives", if_metrics["confusion_matrix"]["fp"], ae_metrics["confusion_matrix"]["fp"]),
-        ("False Negatives", if_metrics["confusion_matrix"]["fn"], ae_metrics["confusion_matrix"]["fn"]),
-        ("True Positives", if_metrics["confusion_matrix"]["tp"], ae_metrics["confusion_matrix"]["tp"]),
+        ("False Positives", cm_if["fp"], cm_ae["fp"]),
+        ("False Negatives", cm_if["fn"], cm_ae["fn"]),
+        ("True Positives", cm_if["tp"], cm_ae["tp"]),
     ]
 
     for name, m_if, m_ae in metrics_to_show:
@@ -92,7 +100,10 @@ def main() -> None:
     print("=" * 80)
     print("Analysis:")
     print("  • Isolation Forest partitions feature space linearly with axis-aligned splits.")
-    print("  • Autoencoder models non-linear cross-feature relationships via bottleneck reconstruction.")
+    print(
+        "  • Autoencoder models non-linear cross-feature relationships "
+        "via bottleneck reconstruction."
+    )
     print("=" * 80 + "\n")
 
 

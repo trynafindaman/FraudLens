@@ -9,11 +9,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Install system dependencies
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
+# hadolint ignore=DL3013
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

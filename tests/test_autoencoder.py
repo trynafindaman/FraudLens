@@ -13,7 +13,9 @@ from src.data_prep import generate_synthetic_sample, preprocess_data, get_strati
 def sample_dataset(tmp_path: Path):
     """Fixture providing train and test features."""
     csv_file = tmp_path / "test_ae.csv"
-    df = generate_synthetic_sample(output_path=csv_file, n_samples=300, fraud_ratio=0.05, random_state=42)
+    df = generate_synthetic_sample(
+        output_path=csv_file, n_samples=300, fraud_ratio=0.05, random_state=42
+    )
     X, y, scaler = preprocess_data(df, fit_scaler=True)
     X_train, X_test, y_train, y_test = get_stratified_split(X, y, test_size=0.25, random_state=42)
     return X_train, X_test, y_train, y_test, scaler

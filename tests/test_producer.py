@@ -12,7 +12,9 @@ from src.data_prep import generate_synthetic_sample
 def sample_df(tmp_path):
     """Fixture providing a small transactions DataFrame."""
     csv_file = tmp_path / "test_stream.csv"
-    df = generate_synthetic_sample(output_path=csv_file, n_samples=30, fraud_ratio=0.1, random_state=42)
+    df = generate_synthetic_sample(
+        output_path=csv_file, n_samples=30, fraud_ratio=0.1, random_state=42
+    )
     return df
 
 

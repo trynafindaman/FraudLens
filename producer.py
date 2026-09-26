@@ -25,6 +25,13 @@ from typing import Any, Dict, Iterator, Optional
 import pandas as pd
 from dotenv import load_dotenv
 
+try:
+    from kafka import KafkaProducer
+    from kafka.errors import KafkaError
+except ImportError:
+    KafkaProducer = None
+    KafkaError = Exception
+
 from src.data_prep import (
     AMOUNT_COL,
     CLASS_COL,
@@ -84,9 +91,14 @@ def format_transaction(
     }
 
 
-def create_producer(bootstrap_servers: str, max_retries: int = 12, retry_delay: float = 3.0):
+def create_producer(
+    bootstrap_servers: str,
+    max_retries: int = 12,
+    retry_delay: float = 3.0,
+) -> Any:
     """Instantiate a KafkaProducer client with automatic retry backoff."""
-    from kafka import KafkaProducer
+    if KafkaProducer is None:
+        raise RuntimeError("kafka-python package is not installed.")
 
     logger.info("Connecting to Kafka producer at %s...", bootstrap_servers)
     for attempt in range(1, max_retries + 1):
@@ -100,7 +112,7 @@ def create_producer(bootstrap_servers: str, max_retries: int = 12, retry_delay: 
             )
             logger.info("Connected to Kafka brokers at %s", bootstrap_servers)
             return producer
-        except Exception as exc:
+        except (KafkaError, OSError, ConnectionError) as exc:
             if attempt < max_retries:
                 logger.warning(
                     "Kafka broker not ready yet (%s). Retrying in %.0fs (attempt %d/%d)...",
@@ -111,7 +123,11 @@ def create_producer(bootstrap_servers: str, max_retries: int = 12, retry_delay: 
                 )
                 time.sleep(retry_delay)
             else:
-                logger.error("Failed to connect producer after %d attempts: %s", max_retries, exc)
+                logger.error(
+                    "Failed to connect producer after %d attempts: %s",
+                    max_retries,
+                    exc,
+                )
                 raise
 
 
@@ -158,13 +174,16 @@ def stream_transactions(
             message = format_transaction(row, is_injected_fraud=is_injected)
 
             if dry_run:
+                status_str = "INJECTED" if is_injected else (
+                    "YES" if message["actual_class"] == 1 else "NO"
+                )
                 logger.info(
                     "[DRY-RUN] [%d/%d] tx=%s amount=$%.2f fraud=%s (class=%d)",
                     idx + 1,
                     limit,
                     message["transaction_id"][:8],
                     message["amount"],
-                    "INJECTED" if is_injected else ("YES" if message["actual_class"] == 1 else "NO"),
+                    status_str,
                     message["actual_class"],
                 )
             else:
@@ -258,8 +277,13 @@ def main() -> None:
     data_path = Path(SAMPLE_DATA_PATH if args.use_sample else args.data_path)
     if not data_path.exists():
         if data_path == DEFAULT_DATA_PATH:
-            logger.info("Full Kaggle dataset not found at %s. Bootstrapping sample dataset...", data_path)
-            generate_synthetic_sample(output_path=SAMPLE_DATA_PATH, n_samples=2000, fraud_ratio=0.01)
+            logger.info(
+                "Full Kaggle dataset not found at %s. Bootstrapping sample dataset...",
+                data_path,
+            )
+            generate_synthetic_sample(
+                output_path=SAMPLE_DATA_PATH, n_samples=2000, fraud_ratio=0.01
+            )
             data_path = SAMPLE_DATA_PATH
         else:
             logger.error("Dataset not found at %s", data_path)
@@ -273,11 +297,12 @@ def main() -> None:
     if not args.dry_run:
         try:
             producer = create_producer(args.bootstrap_servers)
-        except Exception:
+        except (KafkaError, OSError, ConnectionError, RuntimeError) as exc:
             logger.warning(
-                "Unable to connect to Kafka at '%s'. "
+                "Unable to connect to Kafka at '%s': %s. "
                 "Running in --dry-run mode for local demonstration.",
                 args.bootstrap_servers,
+                exc,
             )
             args.dry_run = True
 

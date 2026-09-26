@@ -93,7 +93,9 @@ def main() -> None:
         if data_path == DEFAULT_DATA_PATH:
             logger.info("Full Kaggle 'creditcard.csv' not found.")
             logger.info("Auto-generating a sample dataset for immediate execution...")
-            generate_synthetic_sample(output_path=SAMPLE_DATA_PATH, n_samples=3000, fraud_ratio=0.01)
+            generate_synthetic_sample(
+                output_path=SAMPLE_DATA_PATH, n_samples=3000, fraud_ratio=0.01
+            )
             data_path = SAMPLE_DATA_PATH
         else:
             raise FileNotFoundError(f"Specified dataset does not exist: {data_path}")
@@ -108,7 +110,10 @@ def main() -> None:
 
     # Adjust contamination if using small sample with different fraud ratio
     empirical_fraud_rate = float(y.mean())
-    contamination = min(max(empirical_fraud_rate, 0.001), 0.05) if args.use_sample or data_path == SAMPLE_DATA_PATH else args.contamination
+    if args.use_sample or data_path == SAMPLE_DATA_PATH:
+        contamination = min(max(empirical_fraud_rate, 0.001), 0.05)
+    else:
+        contamination = args.contamination
 
     # 3. Stratified Train/Test Split
     logger.info("Step 3: Creating stratified train/test split (test_size=%.2f)...", args.test_size)
@@ -142,8 +147,12 @@ def main() -> None:
     normal_result = detector.predict_single(amount=25.50, features=sample_normal_features)
     fraud_result = detector.predict_single(amount=4820.00, features=sample_fraud_features)
 
-    print(f"Normal transaction ($25.50):   score={normal_result['risk_score']:.4f}, suspicious={normal_result['is_suspicious']}")
-    print(f"Suspicious transaction ($4820): score={fraud_result['risk_score']:.4f}, suspicious={fraud_result['is_suspicious']}")
+    norm_score = normal_result['risk_score']
+    norm_flag = normal_result['is_suspicious']
+    fraud_score = fraud_result['risk_score']
+    fraud_flag = fraud_result['is_suspicious']
+    print(f"Normal transaction ($25.50):   score={norm_score:.4f}, suspicious={norm_flag}")
+    print(f"Suspicious transaction ($4820): score={fraud_score:.4f}, suspicious={fraud_flag}")
     print("=" * 60)
 
 

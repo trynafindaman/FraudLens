@@ -22,16 +22,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from dotenv import load_dotenv
 import httpx
+from dotenv import load_dotenv
 
+try:
+    from kafka import KafkaConsumer
+    from kafka.errors import KafkaError
+except ImportError:
+    KafkaConsumer = None
+    KafkaError = Exception
+
+from producer import create_producer, format_transaction
 from src.data_prep import (
     DEFAULT_DATA_DIR,
     SAMPLE_DATA_PATH,
     generate_synthetic_sample,
     load_data,
 )
-from producer import format_transaction
 
 # Load environment configuration
 load_dotenv()
@@ -157,9 +164,10 @@ def create_kafka_consumer(
     group_id: str = "fraud-detection-consumers",
     max_retries: int = 12,
     retry_delay: float = 3.0,
-):
+) -> Any:
     """Instantiate a KafkaConsumer client with automatic retry backoff."""
-    from kafka import KafkaConsumer
+    if KafkaConsumer is None:
+        raise RuntimeError("kafka-python package is not installed.")
 
     logger.info("Connecting to Kafka at %s (waiting for broker to be ready)...", bootstrap_servers)
     for attempt in range(1, max_retries + 1):
@@ -173,9 +181,9 @@ def create_kafka_consumer(
                 value_deserializer=lambda m: json.loads(m.decode("utf-8")),
                 key_deserializer=lambda k: k.decode("utf-8") if k else None,
             )
-            logger.info("Connected to Kafka brokers at %s, subscribed to '%s'", bootstrap_servers, topic_in)
+            logger.info("Connected to Kafka at %s, subscribed to '%s'", bootstrap_servers, topic_in)
             return consumer
-        except Exception as exc:
+        except (KafkaError, OSError, ConnectionError) as exc:
             if attempt < max_retries:
                 logger.warning(
                     "Kafka not ready yet at %s (%s). Retrying in %.0fs (attempt %d/%d)...",
@@ -187,7 +195,11 @@ def create_kafka_consumer(
                 )
                 time.sleep(retry_delay)
             else:
-                logger.error("Failed to connect Kafka consumer after %d attempts: %s", max_retries, exc)
+                logger.error(
+                    "Failed to connect Kafka consumer after %d attempts: %s",
+                    max_retries,
+                    exc,
+                )
                 raise
 
 
@@ -240,8 +252,12 @@ def run_consumer_loop(
                     record["e2e_latency_ms"],
                 )
 
-            except Exception as exc:
-                logger.error("Error processing transaction: %s", exc)
+            except httpx.HTTPError as exc:
+                logger.error("Scoring API HTTP error for transaction: %s", exc)
+            except (KeyError, ValueError, TypeError) as exc:
+                logger.error("Data error processing transaction payload: %s", exc)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Unexpected error processing transaction: %s", exc)
 
             if max_events and stats["processed"] >= max_events:
                 logger.info("Reached target limit of %d events.", max_events)
@@ -252,8 +268,9 @@ def run_consumer_loop(
     finally:
         http_client.close()
 
-    avg_latency = (stats["total_latency_ms"] / stats["processed"]) if stats["processed"] > 0 else 0.0
-    flag_rate = (stats["suspicious"] / stats["processed"] * 100.0) if stats["processed"] > 0 else 0.0
+    processed = stats["processed"]
+    avg_latency = (stats["total_latency_ms"] / processed) if processed > 0 else 0.0
+    flag_rate = (stats["suspicious"] / processed * 100.0) if processed > 0 else 0.0
 
     logger.info("=" * 60)
     logger.info("CONSUMER SESSION SUMMARY:")
@@ -325,52 +342,53 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def run_simulation(args: argparse.Namespace) -> None:
+    """Run consumer simulation on sample dataset without a live Kafka broker."""
+    logger.info("Running in --dry-run simulation mode (no Kafka cluster required).")
+    if not SAMPLE_DATA_PATH.exists():
+        generate_synthetic_sample(output_path=SAMPLE_DATA_PATH, n_samples=100)
+    df = load_data(SAMPLE_DATA_PATH)
+    limit = args.max_events or 10
+
+    simulated_messages = []
+    for i in range(min(limit, len(df))):
+        is_fraud = (i == 2)  # inject sample fraud for demonstration
+        simulated_messages.append(format_transaction(df.iloc[i], is_injected_fraud=is_fraud))
+
+    run_consumer_loop(
+        consumer=simulated_messages,
+        api_url=args.api_url,
+        producer=None,
+        topic_out=None,
+        sink_path=args.sink_path,
+        max_events=limit,
+    )
+
+
 def main() -> None:
     """Main execution function for consumer."""
     args = parse_args()
 
     # Dry-run simulation mode (runs without live Kafka cluster)
     if args.dry_run:
-        logger.info("Running in --dry-run simulation mode (no Kafka cluster required).")
-        if not SAMPLE_DATA_PATH.exists():
-            generate_synthetic_sample(output_path=SAMPLE_DATA_PATH, n_samples=100)
-        df = load_data(SAMPLE_DATA_PATH)
-        limit = args.max_events or 10
-
-        simulated_messages = []
-        for i in range(min(limit, len(df))):
-            is_fraud = (i == 2)  # inject sample fraud for demonstration
-            simulated_messages.append(format_transaction(df.iloc[i], is_injected_fraud=is_fraud))
-
-        run_consumer_loop(
-            consumer=simulated_messages,
-            api_url=args.api_url,
-            producer=None,
-            topic_out=None,
-            sink_path=args.sink_path,
-            max_events=limit,
-        )
+        run_simulation(args)
         return
 
     # Live Kafka connection mode
-    consumer = None
-    producer = None
     try:
-        from producer import create_producer
-
         consumer = create_kafka_consumer(
             bootstrap_servers=args.bootstrap_servers,
             topic_in=args.topic_in,
             group_id=args.group_id,
         )
         producer = create_producer(args.bootstrap_servers)
-    except Exception:
+    except (KafkaError, OSError, ConnectionError, RuntimeError) as exc:
         logger.warning(
-            "Could not connect to Kafka at '%s'. Falling back to --dry-run simulation.",
+            "Could not connect to Kafka at '%s': %s. Falling back to --dry-run simulation.",
             args.bootstrap_servers,
+            exc,
         )
-        args.dry_run = True
-        main()
+        run_simulation(args)
         return
 
     run_consumer_loop(

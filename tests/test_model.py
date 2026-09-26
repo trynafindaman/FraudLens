@@ -14,7 +14,9 @@ from src.model import FraudDetector
 def trained_detector(tmp_path: Path):
     """Fixture providing a fitted FraudDetector on synthetic data."""
     csv_file = tmp_path / "train_sample.csv"
-    df = generate_synthetic_sample(output_path=csv_file, n_samples=400, fraud_ratio=0.05, random_state=42)
+    df = generate_synthetic_sample(
+        output_path=csv_file, n_samples=400, fraud_ratio=0.05, random_state=42
+    )
     X, y, scaler = preprocess_data(df, fit_scaler=True)
     X_train, X_test, y_train, y_test = get_stratified_split(X, y, test_size=0.25, random_state=42)
 

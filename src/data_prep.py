@@ -93,7 +93,12 @@ def generate_synthetic_sample(
     df = pd.DataFrame(data)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
-    logger.info("Saved synthetic sample with %d rows (%d fraud) to %s", n_samples, n_fraud, output_path)
+    logger.info(
+        "Saved synthetic sample with %d rows (%d fraud) to %s",
+        n_samples,
+        n_fraud,
+        output_path,
+    )
     return df
 
 
@@ -114,9 +119,10 @@ def load_data(filepath: Path | str = DEFAULT_DATA_PATH) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(
             f"Dataset not found at '{path}'.\n"
-            f"Please download 'creditcard.csv' from Kaggle (https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud)\n"
+            "Please download 'creditcard.csv' from Kaggle:\n"
+            "https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud\n"
             f"and place it at '{DEFAULT_DATA_PATH}', or generate a sample using:\n"
-            f"  python -m src.data_prep --generate-sample"
+            "  python -m src.data_prep --generate-sample"
         )
 
     logger.info("Loading transaction dataset from %s ...", path)
@@ -201,9 +207,21 @@ def run_eda(df: pd.DataFrame, verbose: bool = True) -> Dict[str, Any]:
         print(f"  - Imbalance: 1 fraud per {imbalance_ratio:,.1f} normal transactions")
         print("-" * 60)
         print("Transaction Amount ($) Comparison:")
-        print(f"  - Overall: mean = ${amount_overall.get('mean', 0.0):.2f}, median = ${amount_overall.get('50%', 0.0):.2f}, max = ${amount_overall.get('max', 0.0):.2f}")
-        print(f"  - Normal:  mean = ${amount_normal_stats['mean']:.2f}, median = ${amount_normal_stats['median']:.2f}, max = ${amount_normal_stats['max']:.2f}")
-        print(f"  - Fraud:   mean = ${amount_fraud_stats['mean']:.2f}, median = ${amount_fraud_stats['median']:.2f}, max = ${amount_fraud_stats['max']:.2f}")
+        print(
+            f"  - Overall: mean = ${amount_overall.get('mean', 0.0):.2f}, "
+            f"median = ${amount_overall.get('50%', 0.0):.2f}, "
+            f"max = ${amount_overall.get('max', 0.0):.2f}"
+        )
+        print(
+            f"  - Normal:  mean = ${amount_normal_stats['mean']:.2f}, "
+            f"median = ${amount_normal_stats['median']:.2f}, "
+            f"max = ${amount_normal_stats['max']:.2f}"
+        )
+        print(
+            f"  - Fraud:   mean = ${amount_fraud_stats['mean']:.2f}, "
+            f"median = ${amount_fraud_stats['median']:.2f}, "
+            f"max = ${amount_fraud_stats['max']:.2f}"
+        )
         print("=" * 60 + "\n")
 
     return eda_summary
@@ -233,7 +251,7 @@ def preprocess_data(
 
     # Drop nulls if any exist
     if df_clean.isnull().any().any():
-        logger.warning("Found nulls in dataset; dropping rows with null values.")
+        logger.warning("Found nulls in dataset, dropping rows with null values.")
         df_clean = df_clean.dropna()
 
     if scaler is None:
@@ -333,8 +351,13 @@ def main() -> None:
     # Fallback to generating sample if data doesn't exist yet
     if not target_path.exists():
         if target_path == DEFAULT_DATA_PATH:
-            logger.info("Kaggle 'creditcard.csv' not found. Generating a sample dataset for demonstration...")
-            generate_synthetic_sample(output_path=SAMPLE_DATA_PATH, n_samples=args.sample_rows)
+            logger.info(
+                "Kaggle 'creditcard.csv' not found. "
+                "Generating a sample dataset for demonstration..."
+            )
+            generate_synthetic_sample(
+                output_path=SAMPLE_DATA_PATH, n_samples=args.sample_rows
+            )
             target_path = SAMPLE_DATA_PATH
         else:
             raise FileNotFoundError(f"Requested dataset file not found: {target_path}")
@@ -350,11 +373,22 @@ def main() -> None:
     X, y, scaler = preprocess_data(df, fit_scaler=True)
     X_train, X_test, y_train, y_test = get_stratified_split(X, y, test_size=0.2)
 
+    train_fraud_cnt = int(y_train.sum())
+    train_fraud_pct = y_train.mean() * 100.0
+    test_fraud_cnt = int(y_test.sum())
+    test_fraud_pct = y_test.mean() * 100.0
+
     print("-" * 60)
     print("PREPROCESSING & SPLIT VERIFICATION:")
     print(f"  - Feature count: {X.shape[1]} features (V1-V28 + scaled_amount)")
-    print(f"  - Training set:  {len(X_train):,} samples (Fraud: {int(y_train.sum()):,}, {y_train.mean()*100:.3f}%)")
-    print(f"  - Testing set:   {len(X_test):,} samples (Fraud: {int(y_test.sum()):,}, {y_test.mean()*100:.3f}%)")
+    print(
+        f"  - Training set:  {len(X_train):,} samples "
+        f"(Fraud: {train_fraud_cnt:,}, {train_fraud_pct:.3f}%)"
+    )
+    print(
+        f"  - Testing set:   {len(X_test):,} samples "
+        f"(Fraud: {test_fraud_cnt:,}, {test_fraud_pct:.3f}%)"
+    )
     print(f"  - Amount scaler: {type(scaler).__name__} fitted successfully")
     print("=" * 60)
 

@@ -37,6 +37,7 @@ class AutoencoderNet(nn.Module):
     """Deep autoencoder network with symmetrical encoder-decoder bottleneck."""
 
     def __init__(self, input_dim: int = 29, latent_dim: int = 8) -> None:
+        """Initialize symmetrical Autoencoder neural network architecture."""
         super().__init__()
         # Encoder: 29 -> 16 -> 8
         self.encoder = nn.Sequential(
@@ -72,6 +73,7 @@ class AutoencoderDetector:
         threshold: float = 0.80,
         random_state: int = 42,
     ) -> None:
+        """Initialize Autoencoder detector hyper-parameters and network."""
         torch.manual_seed(random_state)
         np.random.seed(random_state)
 
@@ -110,7 +112,10 @@ class AutoencoderDetector:
             y_arr = np.asarray(y_train)
             normal_mask = (y_arr == 0)
             X_train_normal = X_mat[normal_mask]
-            logger.info("Filtered %d normal transactions for Autoencoder training.", len(X_train_normal))
+            logger.info(
+                "Filtered %d normal transactions for Autoencoder training.",
+                len(X_train_normal),
+            )
         else:
             X_train_normal = X_mat
 
@@ -134,7 +139,12 @@ class AutoencoderDetector:
 
             epoch_loss /= len(X_train_normal)
             if epoch % 5 == 0 or epoch == epochs:
-                logger.info("Autoencoder Epoch [%d/%d] - Reconstruction Loss: %.5f", epoch, epochs, epoch_loss)
+                logger.info(
+                    "Autoencoder Epoch [%d/%d] - Reconstruction Loss: %.5f",
+                    epoch,
+                    epochs,
+                    epoch_loss,
+                )
 
         self.network.eval()
         self.is_fitted = True
@@ -219,12 +229,23 @@ class AutoencoderDetector:
         return metrics
 
     def save(self, filepath: Path | str = DEFAULT_AE_PATH) -> Path:
-        """Save network weights and metadata."""
+        """Save network weights and metadata securely."""
         path = Path(filepath)
         path.parent.mkdir(parents=True, exist_ok=True)
+        scaler_center = (
+            torch.tensor(self.scaler.center_, dtype=torch.float32)
+            if self.scaler is not None and hasattr(self.scaler, "center_")
+            else None
+        )
+        scaler_scale = (
+            torch.tensor(self.scaler.scale_, dtype=torch.float32)
+            if self.scaler is not None and hasattr(self.scaler, "scale_")
+            else None
+        )
         checkpoint = {
             "state_dict": self.network.state_dict(),
-            "scaler": self.scaler,
+            "scaler_center": scaler_center,
+            "scaler_scale": scaler_scale,
             "input_dim": self.input_dim,
             "latent_dim": self.latent_dim,
             "threshold": self.threshold,
@@ -237,16 +258,33 @@ class AutoencoderDetector:
 
     @classmethod
     def load(cls, filepath: Path | str = DEFAULT_AE_PATH) -> "AutoencoderDetector":
-        """Load network weights and metadata."""
+        """Load network weights and metadata safely using weights_only=True."""
         path = Path(filepath)
-        checkpoint = torch.load(path, map_location=torch.device("cpu"), weights_only=False)
+        if not path.exists():
+            raise FileNotFoundError(f"Autoencoder checkpoint not found at '{path}'.")
+
+        logger.info("Loading Autoencoder checkpoint from %s ...", path)
+        checkpoint = torch.load(path, map_location=torch.device("cpu"), weights_only=True)
+
         instance = cls(
             input_dim=checkpoint["input_dim"],
             latent_dim=checkpoint["latent_dim"],
             threshold=checkpoint["threshold"],
         )
         instance.network.load_state_dict(checkpoint["state_dict"])
-        instance.scaler = checkpoint["scaler"]
+
+        has_center = checkpoint.get("scaler_center") is not None
+        has_scale = checkpoint.get("scaler_scale") is not None
+        if has_center and has_scale:
+            rebuilt_scaler = RobustScaler()
+            rebuilt_scaler.center_ = checkpoint["scaler_center"].numpy()
+            rebuilt_scaler.scale_ = checkpoint["scaler_scale"].numpy()
+            instance.scaler = rebuilt_scaler
+        elif "scaler" in checkpoint:
+            instance.scaler = checkpoint["scaler"]
+        else:
+            instance.scaler = None
+
         instance.min_mse = checkpoint["min_mse"]
         instance.max_mse = checkpoint["max_mse"]
         instance.is_fitted = True

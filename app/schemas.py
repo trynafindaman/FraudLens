@@ -39,7 +39,9 @@ class TransactionScoreRequest(BaseModel):
     def validate_features_length(cls, v: List[float]) -> List[float]:
         """Ensure exactly 28 PCA features are provided."""
         if len(v) != 28:
-            raise ValueError(f"Features array must contain exactly 28 PCA values (V1..V28), got {len(v)}.")
+            raise ValueError(
+                f"Features array must contain exactly 28 PCA values (V1..V28), got {len(v)}."
+            )
         return v
 
 
@@ -73,7 +75,10 @@ class HealthResponse(BaseModel):
     """Liveness and readiness check response."""
 
     status: str = Field(description="Service health status.", examples=["ok"])
-    model_loaded: bool = Field(description="Whether the fraud detection model is active.", examples=[True])
+    model_loaded: bool = Field(
+        description="Whether the fraud detection model is active.",
+        examples=[True],
+    )
     threshold: float = Field(description="Configured decision threshold.", examples=[0.80])
     version: str = Field(description="API service version.", examples=["1.0.0"])
 

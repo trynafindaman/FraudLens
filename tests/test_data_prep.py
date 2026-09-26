@@ -24,7 +24,9 @@ from src.data_prep import (
 def sample_csv_path(tmp_path: Path) -> Path:
     """Fixture providing a temporary synthetic CSV file path."""
     csv_file = tmp_path / "test_creditcard.csv"
-    generate_synthetic_sample(output_path=csv_file, n_samples=300, fraud_ratio=0.05, random_state=42)
+    generate_synthetic_sample(
+        output_path=csv_file, n_samples=300, fraud_ratio=0.05, random_state=42
+    )
     return csv_file
 
 
